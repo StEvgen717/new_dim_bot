@@ -28,7 +28,40 @@ def list_streets(city):
 
 def list_users_by_street(city, street):
     try:
-        sheet = get_sheet_by_title(f"{city}_{street}")
+        title = f"{city}_{street}"
+        sheet = get_sheet_by_title(title)
         return sheet.get_all_records()
-    except:
+    except Exception as e:
+        print(f"[Помилка] Лист '{city}_{street}' не знайдено або інша помилка: {e}")
         return []
+
+def get_user_by_contract_or_name(query):
+    query = str(query).strip().lower()
+    matched_users = []
+
+    for worksheet in spreadsheet.worksheets():
+        title = worksheet.title
+        if title in ["Міста", "Вулиці"]:
+            continue
+
+        try:
+            data = worksheet.get_all_records()
+        except Exception as e:
+            print(f"[Помилка при читанні листа {title}]: {e}")
+            continue
+
+        for row in data:
+            contract = str(row.get("номер договору", "")).strip().lower()
+            name = str(row.get("ПІБ", "")).strip().lower()
+
+            if query == contract:
+                return row  # точне співпадіння по договору — однозначний результат
+            if query == name:
+                matched_users.append(row)
+
+    if len(matched_users) == 1:
+        return matched_users[0]
+    elif len(matched_users) > 1:
+        return {"message": "multiple", "count": len(matched_users)}
+
+    return None
