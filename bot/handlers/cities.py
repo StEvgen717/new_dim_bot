@@ -21,7 +21,7 @@ MONTHS_UA = {
 }
 
 # ціна за мішок
-BAG_PRICE = 27.65
+BAG_PRICE = 27.6467
 
 @router.message(Command("start"))
 async def start_handler(message: types.Message):
@@ -62,7 +62,7 @@ async def handle_all_text(message: types.Message):
 
     if text == "Пошук за договором":
         user_states[user_id] = (None, "search")
-        await message.answer("Введіть номер договору (наприклад: 1000) або ПІБ (наприклад: Гончар Леся Петрівна):")
+        await message.answer("Введіть номер договору (наприклад: 1000) або ПІБ (наприклад: Гончар Л.П):")
         return
 
     if text == "🔙 Назад":
@@ -123,7 +123,7 @@ async def handle_all_text(message: types.Message):
 
             msg = f"Буд. {house}: {name} | Договір №{contract} | Мішки: {bags} | {status}"
         else:
-            msg = "Мешканця не знайдено. Введіть номер договору (наприклад: 1000) або ПІБ (наприклад: Гончар Леся Петрівна). Перевірте, щоб ім’я було повністю: Прізвище Ім’я По батькові."
+            msg = "Мешканця не знайдено. Введіть номер договору (наприклад: 1000) або ПІБ (наприклад: Гончар Л.П). Перевірте, щоб ім’я було повністю: Прізвище Ім’я По батькові."
 
         keyboard = ReplyKeyboardMarkup(
             keyboard=[[KeyboardButton(text="📝 Головне меню")]],
@@ -147,12 +147,16 @@ async def handle_all_text(message: types.Message):
     if city:
         user_states[user_id] = (city, text)
         residents = list_users_by_street(city, text)
-        if not residents:
+
+        # Фільтруємо лише мешканців з заповненим ПІБ
+        filtered_residents = [r for r in residents if str(r.get("ПІБ", "")).strip()]
+
+        if not filtered_residents:
             await message.answer("Мешканців не знайдено")
         else:
             current_month = MONTHS_UA[datetime.now().month]
             msg = "Список мешканців\n"
-            for person in residents:
+            for person in filtered_residents:
                 name = person['ПІБ']
                 house = person['№ будинку']
                 contract = str(person['номер договору'])
@@ -174,7 +178,7 @@ async def handle_all_text(message: types.Message):
                 else:
                     status = "❌ НЕ ОПЛАЧЕНО"
 
-                msg += f"Буд. {house}: {name} | Договір №{contract} | Мішки: {bags} | {status}\n"
+                msg += f"буд. {house}: {name} | Договір №{contract} | Мішки: {bags} | {status}\n"
 
             keyboard = ReplyKeyboardMarkup(
                 keyboard=[[KeyboardButton(text="🔙 Назад"), KeyboardButton(text="📝 Головне меню")]],
