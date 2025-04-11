@@ -1,4 +1,4 @@
-# ===== handlers/cities.py (оновлено під aiogram 3 з "Назад", пошуком, головним меню та кнопкою "Розпочати") =====
+import logging
 from aiogram import types, Router, F
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from aiogram.filters import Command
@@ -6,6 +6,10 @@ from gspread_client import list_cities, list_streets, list_users_by_street, get_
 import os
 from dotenv import load_dotenv
 from datetime import datetime
+
+# Налаштування логування
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 ADMINS = [int(id_) for id_ in os.getenv("ADMINS", "").split(",") if id_]
@@ -35,7 +39,7 @@ async def send_long_message(message: types.Message, text: str, reply_markup=None
 @router.message(Command("start"))
 async def start_handler(message: types.Message):
     keyboard = ReplyKeyboardMarkup(
-        keyboard=[
+        keyboard=[ 
             [KeyboardButton(text="🚀 РОЗПОЧАТИ")]
         ],
         resize_keyboard=True
@@ -50,7 +54,7 @@ async def handle_all_text(message: types.Message):
     if text == "🚀 РОЗПОЧАТИ" or text == "📝 Головне меню":
         user_states[user_id] = (None, None)
         keyboard = ReplyKeyboardMarkup(
-            keyboard=[
+            keyboard=[ 
                 [KeyboardButton(text="Обрати населений пункт")],
                 [KeyboardButton(text="Пошук за договором")]
             ],
@@ -104,6 +108,7 @@ async def handle_all_text(message: types.Message):
             search_input = text.strip().lower()
             result = get_user_by_contract_or_name(search_input)
         except Exception as e:
+            logger.error(f"Помилка при обробці пошуку: {e}, Вхідні дані: {text}")
             await message.answer("⚠️ Сталася помилка під час обробки пошуку. Перевірте формат введених даних або зверніться до адміністратора.")
             return
 
@@ -166,28 +171,31 @@ async def handle_all_text(message: types.Message):
             current_month = MONTHS_UA[datetime.now().month]
             msg = "Список мешканців\n"
             for person in filtered_residents:
-                name = person['ПІБ']
-                house = person['№ будинку']
-                contract = str(person['номер договору'])
-                bags = int(person['кількість мішків'])
-
-                raw_payment = str(person.get(current_month, "")).strip().replace(",", ".")
                 try:
-                    payment = float(raw_payment)
-                except ValueError:
-                    payment = 0.0
+                    name = person['ПІБ']
+                    house = person['№ будинку']
+                    contract = str(person['номер договору'])
+                    bags = int(person['кількість мішків'])
 
-                required = bags * BAG_PRICE
+                    raw_payment = str(person.get(current_month, "")).strip().replace(",", ".")
+                    try:
+                        payment = float(raw_payment)
+                    except ValueError:
+                        payment = 0.0
 
-                if payment >= required:
-                    status = "✅ ОПЛАЧЕНО"
-                elif 0 < payment < required:
-                    paid_bags = round(payment / BAG_PRICE, 1)
-                    status = f"❗️УВАГА  ОПЛАЧЕНО за {paid_bags} мішок(и)"
-                else:
-                    status = "❌ НЕ ОПЛАЧЕНО"
+                    required = bags * BAG_PRICE
 
-                msg += f"буд. {house}: {name} | Договір №{contract} | Мішки: {bags} | {status}\n"
+                    if payment >= required:
+                        status = "✅ ОПЛАЧЕНО"
+                    elif 0 < payment < required:
+                        paid_bags = round(payment / BAG_PRICE, 1)
+                        status = f"❗️УВАГА  ОПЛАЧЕНО за {paid_bags} мішок(и)"
+                    else:
+                        status = "❌ НЕ ОПЛАЧЕНО"
+
+                    msg += f"буд. {house}: {name} | Договір №{contract} | Мішки: {bags} | {status}\n"
+                except Exception as e:
+                    logger.error(f"Помилка обробки даних для будинку {person.get('№ будинку', 'невідомо')}, договору {person.get('номер договору', 'невідомо')}. Помилка: {e}")
 
             keyboard = ReplyKeyboardMarkup(
                 keyboard=[[KeyboardButton(text="🔙 Назад"), KeyboardButton(text="📝 Головне меню")]],
