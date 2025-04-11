@@ -29,7 +29,7 @@ Google Drive API — так само відкрийте й Enable.
 
 ## 🚀 Запуск:
 ```
-pip install aiogram gspread oauth2client python-dotenv
+pip install aiogram gspread oauth2client python-dotenv tenacity
 python main.py
 ```
 
