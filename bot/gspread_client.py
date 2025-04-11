@@ -36,12 +36,24 @@ def list_streets(city):
     all_data = safe_get_all_records(sheet)
     return [row['Назва'] for row in all_data if row['Місто'] == city]
 
+
 def list_users_by_street(city, street):
     try:
-        title = f"{city}_{street}"
-        sheet = get_sheet_by_title(title)
-        all_data = safe_get_all_records(sheet)
-        return [row for row in all_data if str(row.get("ПІБ", "")).strip()]  # ігноруємо пусті ПІБ
+        target_title = f"{city}_{street}"
+        target_title_lower = target_title.lower()
+        found_sheet = None
+
+        # Перебираємо всі аркуші та знаходимо той, назва якого співпадає незалежно від регістра
+        for ws in spreadsheet.worksheets():
+            if ws.title.lower() == target_title_lower:
+                found_sheet = ws
+                break
+
+        if not found_sheet:
+            raise Exception(f"[Помилка] Лист '{city}_{street}' не знайдено або інша помилка")
+
+        all_data = safe_get_all_records(found_sheet)
+        return [row for row in all_data if str(row.get("ПІБ", "")).strip()]  # ігноруємо порожні ПІБ
     except Exception as e:
         print(f"[Помилка] Лист '{city}_{street}' не знайдено або інша помилка: {e}")
         return []
