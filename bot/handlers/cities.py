@@ -23,6 +23,15 @@ MONTHS_UA = {
 # ціна за мішок
 BAG_PRICE = 27.6467
 
+# Функція для відправки довгих повідомлень
+async def send_long_message(message: types.Message, text: str, reply_markup=None):
+    max_length = 4096  # максимальна кількість символів в одному повідомленні
+    # Розбиваємо текст на частини, якщо він перевищує ліміт
+    for i in range(0, len(text), max_length):
+        part = text[i:i + max_length]
+        # Відправляємо частину повідомлення
+        await message.answer(part, reply_markup=reply_markup if i + max_length >= len(text) else None)
+
 @router.message(Command("start"))
 async def start_handler(message: types.Message):
     keyboard = ReplyKeyboardMarkup(
@@ -184,6 +193,7 @@ async def handle_all_text(message: types.Message):
                 keyboard=[[KeyboardButton(text="🔙 Назад"), KeyboardButton(text="📝 Головне меню")]],
                 resize_keyboard=True
             )
-            await message.answer(msg, reply_markup=keyboard)
+            # Використовуємо send_long_message для відправки списку мешканців
+            await send_long_message(message, msg, reply_markup=keyboard)
     else:
         await message.answer("Будь ласка, спочатку оберіть населений пункт.")
