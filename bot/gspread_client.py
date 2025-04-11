@@ -1,6 +1,7 @@
 # ===== gspread_client.py =====
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
+import re
 
 scope = [
     "https://spreadsheets.google.com/feeds",
@@ -10,7 +11,7 @@ scope = [
 creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
 client = gspread.authorize(creds)
 
-SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1OaZbj_2HEPwamJwS3VBgGQBi5QY3Pl0zhIQ8Wn6hWJM/edit?usp=sharing"
+SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1vGeHL_HXL_xvu_tNgEiFOrwI9_w4hmrZqweMJn7NEzg/edit?usp=sharing"
 
 spreadsheet = client.open_by_url(SPREADSHEET_URL)
 
@@ -30,7 +31,8 @@ def list_users_by_street(city, street):
     try:
         title = f"{city}_{street}"
         sheet = get_sheet_by_title(title)
-        return sheet.get_all_records()
+        all_data = sheet.get_all_records()
+        return [row for row in all_data if str(row.get("ПІБ", "")).strip()]  # ігноруємо пусті ПІБ
     except Exception as e:
         print(f"[Помилка] Лист '{city}_{street}' не знайдено або інша помилка: {e}")
         return []
@@ -38,6 +40,10 @@ def list_users_by_street(city, street):
 def get_user_by_contract_or_name(query):
     query = str(query).strip().lower()
     matched_users = []
+
+    # підтримка форматів:
+    # "Іванов І.І.", "Іванов І.І", "Іванов І. В.", "Іванов І В" — з крапками або без
+    short_name_pattern = re.compile(r"^([а-щьюяєіїґa-z'-]+)\s+([а-щьюяєіїґa-z])\.?\s*([а-щьюяєіїґa-z])\.?$", re.IGNORECASE)
 
     for worksheet in spreadsheet.worksheets():
         title = worksheet.title
@@ -52,12 +58,25 @@ def get_user_by_contract_or_name(query):
 
         for row in data:
             contract = str(row.get("номер договору", "")).strip().lower()
-            name = str(row.get("ПІБ", "")).strip().lower()
+            name = str(row.get("ПІБ", "")).strip()
 
+            if not name:
+                continue  # ігноруємо пусті ПІБ
+
+            name_lower = name.lower()
+
+            # точне співпадіння по договору
             if query == contract:
-                return row  # точне співпадіння по договору — однозначний результат
-            if query == name:
-                matched_users.append(row)
+                return row
+
+            # ПІБ в форматі Прізвище І.П. або Прізвище І П
+            match = short_name_pattern.match(query)
+            if match:
+                surname, initial1, initial2 = match.groups()
+                if name_lower.startswith(surname.lower()) and \
+                   initial1.lower() in name_lower and \
+                   initial2.lower() in name_lower:
+                    matched_users.append(row)
 
     if len(matched_users) == 1:
         return matched_users[0]
