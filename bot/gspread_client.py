@@ -2,6 +2,7 @@
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import re
+from tenacity import retry, stop_after_attempt, wait_fixed
 
 scope = [
     "https://spreadsheets.google.com/feeds",
@@ -18,20 +19,28 @@ spreadsheet = client.open_by_url(SPREADSHEET_URL)
 def get_sheet_by_title(title):
     return spreadsheet.worksheet(title)
 
+@retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
+def safe_get_all_records(sheet):
+    return sheet.get_all_records()
+
+@retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
+def safe_col_values(sheet, col):
+    return sheet.col_values(col)
+
 def list_cities():
     sheet = get_sheet_by_title("Міста")
-    return sheet.col_values(1)[1:]  # пропускаємо заголовок
+    return safe_col_values(sheet, 1)[1:]  # пропускаємо заголовок
 
 def list_streets(city):
     sheet = get_sheet_by_title("Вулиці")
-    all_data = sheet.get_all_records()
+    all_data = safe_get_all_records(sheet)
     return [row['Назва'] for row in all_data if row['Місто'] == city]
 
 def list_users_by_street(city, street):
     try:
         title = f"{city}_{street}"
         sheet = get_sheet_by_title(title)
-        all_data = sheet.get_all_records()
+        all_data = safe_get_all_records(sheet)
         return [row for row in all_data if str(row.get("ПІБ", "")).strip()]  # ігноруємо пусті ПІБ
     except Exception as e:
         print(f"[Помилка] Лист '{city}_{street}' не знайдено або інша помилка: {e}")
@@ -51,7 +60,7 @@ def get_user_by_contract_or_name(query):
             continue
 
         try:
-            data = worksheet.get_all_records()
+            data = safe_get_all_records(worksheet)
         except Exception as e:
             print(f"[Помилка при читанні листа {title}]: {e}")
             continue
