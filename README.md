@@ -46,12 +46,73 @@ Telegram-бот для ведення каталогу об'єктів неру�
 | `GOOGLE_DRIVE_FOLDER_ID` | ID папки на Drive для фото/відео |
 | `GOOGLE_OAUTH_CLIENT_FILE` | шлях до `google-oauth-client.json` (за замовчуванням - поруч із `main.py`) |
 | `GOOGLE_OAUTH_TOKEN_FILE` | шлях до кешованого токена `token.json` (створюється автоматично) |
+| `GOOGLE_OAUTH_FLOW` | `local_server` (ПК з браузером, за замовчуванням) або `console` (headless-сервер без браузера) |
 | `ADMINS` | Telegram ID через кому, яким дозволено "Додати об'єкт"/"Редагувати". Порожньо = дозволено всім |
 | `SEARCH_PAGE_SIZE` | скільки об'єктів показувати за раз у пошуку (за замовчуванням 5) |
 | `EXCLUDED_SHEETS` | назви аркушів через кому, які існують у таблиці, але НЕ є населеними пунктами (довідники, зведені каталоги тощо) - не показуються в боті |
 
 ⚠️ **Ніколи не комітьте** `.env`, `google-oauth-client.json` і `token.json` -
 вони вже додані до `.gitignore`.
+
+## 🐍 Встановлення Python (якщо ще не встановлено)
+
+Потрібен **Python 3.11 або новіший** (саме на ньому писався й перевірявся бот).
+
+### Windows
+
+1. Завантажте інсталятор з [python.org/downloads](https://www.python.org/downloads/)
+   (кнопка "Download Python 3.1x.x").
+2. Запустіть інсталятор. **На першому ж екрані обов'язково поставте галочку
+   "Add python.exe to PATH"** внизу - без цього команда `python` не
+   працюватиме в терміналі. `pip` встановлюється разом з Python автоматично.
+3. Перевірте в PowerShell:
+   ```powershell
+   python --version
+   pip --version
+   ```
+4. (Рекомендовано) Створіть віртуальне середовище прямо в папці проєкту -
+   щоб залежності бота не змішувались з іншими Python-проєктами:
+   ```powershell
+   cd D:\Bots\TelegramBot
+   python -m venv .venv
+   .venv\Scripts\Activate.ps1
+   ```
+   Якщо PowerShell відмовляється запускати скрипт активації
+   (`...running scripts is disabled on this system`), виконайте одноразово:
+   ```powershell
+   Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+   ```
+   і підтвердьте (`Y`), потім повторіть активацію. Після активації перед
+   рядком у терміналі з'явиться `(.venv)`.
+
+### Ubuntu Server
+
+1. Оновіть списки пакетів і встановіть Python, pip та venv (на Ubuntu
+   `venv` - окремий пакет, його треба ставити явно):
+   ```bash
+   sudo apt update
+   sudo apt install -y python3 python3-pip python3-venv git
+   ```
+2. Перевірте версію (на Ubuntu 22.04/24.04 за замовчуванням уже 3.10/3.12 -
+   якщо потрібна саме 3.11+, а в репозиторії старіша, додайте PPA
+   `deadsnakes`: `sudo add-apt-repository ppa:deadsnakes/ppa`):
+   ```bash
+   python3 --version
+   ```
+3. Перенесіть проєкт на сервер (`git clone` вашого репозиторію, або
+   `scp -r` з локальної машини) і створіть віртуальне середовище:
+   ```bash
+   cd TelegramBot
+   python3 -m venv .venv
+   source .venv/bin/activate
+   ```
+   Після активації перед рядком з'явиться `(.venv)`. Деактивувати - команда
+   `deactivate`.
+
+> У всіх прикладах нижче (`pip install`, `python main.py`) мається на увазі,
+> що віртуальне середовище вже активоване в поточному терміналі.
+
+---
 
 ## 🚀 Запуск
 
@@ -61,16 +122,80 @@ cd bot
 python main.py
 ```
 
-### Перший запуск (одноразово)
+(на Ubuntu команди ті самі - venv вже підміняє `python`/`pip` на `python3`/`pip3` з `.venv`)
 
-Оскільки авторизація - через OAuth "Desktop app", при першому запуску
-відкриється браузер із запитом увійти Google-акаунтом, що має доступ до
-таблиці й папки на Drive. Після підтвердження доступу поруч з `main.py`
-з'явиться файл `token.json` - далі бот працюватиме автоматично, без
-повторного входу (токен оновлюється сам).
+### Перший запуск (одноразово) - вхід Google-акаунтом
+
+Авторизація - через OAuth "Desktop app". Як саме пройде перший вхід,
+залежить від того, є на машині браузер, чи ні (`GOOGLE_OAUTH_FLOW` у `.env`):
+
+**Windows / будь-який ПК з браузером** (`GOOGLE_OAUTH_FLOW=local_server`,
+за замовчуванням) - при запуску `python main.py` сам відкриється браузер із
+запитом увійти Google-акаунтом, що має доступ до таблиці й папки на Drive.
+Після підтвердження поруч з `main.py` з'явиться файл `token.json` - далі
+бот працюватиме автоматично, без повторного входу (токен оновлюється сам).
+
+**Ubuntu Server (headless, без браузера)** - два варіанти, від найпростішого:
+
+1. *Найпростіше* - пройдіть цей самий перший вхід один раз на машині з
+   браузером (наприклад, на своєму Windows ПК за інструкцією вище - у вас
+   він уже пройдений), а потім скопіюйте на сервер **обидва** файли:
+   `bot/google-oauth-client.json` і `bot/token.json` (напр. через `scp`).
+   Сервер далі лише оновлюватиме токен автоматично по HTTP, браузер йому
+   взагалі не знадобиться.
+2. *Або* - увійдіть прямо на сервері без браузера: встановіть у
+   серверному `bot/.env` змінну `GOOGLE_OAUTH_FLOW=console` і запустіть
+   `python main.py` - бот надрукує в термінал посилання для авторизації.
+   Відкрийте це посилання в браузері на БУДЬ-ЯКОМУ іншому пристрої
+   (телефоні, своєму ПК), увійдіть, дозволіть доступ, скопіюйте код
+   авторизації з Google і вставте його назад у термінал сервера (бот
+   чекає на введення).
 
 Якщо потрібно увійти іншим акаунтом або змінити права доступу - видаліть
-`token.json` і запустіть бота знову.
+`token.json` і запустіть бота знову (повторно пройде той самий сценарій).
+
+> ⚠️ Поки проєкт у Google Cloud має статус "Testing" (не опублікований),
+> авторизація через `console`/`local_server` діє лише 7 днів - після цього
+> `token.json` застаріє і вхід доведеться повторити. Щоб цього уникнути на
+> постійно працюючому сервері - опублікуйте застосунок (Google Auth
+> Platform → Audience → Publish app), один раз прийнявши попередження
+> "Google не перевірила цю програму".
+
+### Постійна робота на Ubuntu Server (systemd)
+
+Якщо просто закрити SSH-сесію, `python main.py` зупиниться разом з нею.
+Щоб бот працював постійно й сам піднімався після перезавантаження сервера,
+створіть systemd-сервіс:
+
+```bash
+sudo nano /etc/systemd/system/estate-atlas-bot.service
+```
+
+```ini
+[Unit]
+Description=Estate Atlas Telegram Bot
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/TelegramBot/bot
+ExecStart=/home/ubuntu/TelegramBot/.venv/bin/python main.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+(змініть `User` і шляхи `WorkingDirectory`/`ExecStart` на свої) і запустіть:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now estate-atlas-bot
+sudo systemctl status estate-atlas-bot   # перевірити стан
+journalctl -u estate-atlas-bot -f        # дивитись логи наживо
+```
 
 ---
 

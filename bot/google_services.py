@@ -18,7 +18,7 @@ from io import BytesIO
 from typing import Optional
 
 import gspread
-from gspread.auth import DEFAULT_SCOPES
+from gspread.auth import DEFAULT_SCOPES, console_flow, local_server_flow
 from gspread.exceptions import WorksheetNotFound
 from gspread.utils import rowcol_to_a1
 from googleapiclient.discovery import build
@@ -29,6 +29,7 @@ from config import (
     EXCLUDED_SHEETS,
     GOOGLE_DRIVE_FOLDER_ID,
     GOOGLE_OAUTH_CLIENT_FILE,
+    GOOGLE_OAUTH_FLOW,
     GOOGLE_OAUTH_TOKEN_FILE,
     GOOGLE_SHEET_NAME,
     GOOGLE_SPREADSHEET_ID,
@@ -43,6 +44,7 @@ _retry = retry(stop=stop_after_attempt(3), wait=wait_fixed(2), reraise=True)
 
 _gc = gspread.oauth(
     scopes=DEFAULT_SCOPES,  # spreadsheets + drive (read/write)
+    flow=console_flow if GOOGLE_OAUTH_FLOW == "console" else local_server_flow,
     credentials_filename=str(GOOGLE_OAUTH_CLIENT_FILE),
     authorized_user_filename=str(GOOGLE_OAUTH_TOKEN_FILE),
 )
