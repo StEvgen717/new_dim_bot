@@ -1,0 +1,14 @@
+# Telegram-бот
+aiogram>=3.31,<4
+
+# Google Sheets
+gspread>=6.2,<7
+
+# OAuth ("Desktop app" клієнт) + Google Drive API
+google-auth>=2.61,<3
+google-auth-oauthlib>=1.5,<2
+google-api-python-client>=2.150,<3
+
+# Конфігурація та стійкість до тимчасових помилок API
+python-dotenv>=1.2,<2
+tenacity>=9.2,<10

@@ -1,2 +1,11 @@
-/bot/.env
-/bot/credentials.json
+# ===== Секрети / локальна конфігурація (ніколи не комітити!) =====
+.env
+google-oauth-client.json
+client_secret_*.json
+token.json
+credentials.json
+Google API.txt
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
