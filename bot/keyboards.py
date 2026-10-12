@@ -106,17 +106,16 @@ def settlements_keyboard(
 
 def object_card_keyboard(
     fallback_photos: list[str],
-    videos: list[str],
+    fallback_videos: list[str],
     edit_token: str,
     show_edit: bool = True,
 ) -> InlineKeyboardMarkup | None:
-    """Inline-кнопки під карткою: відео - завжди посиланнями (важчі файли,
-    завантаження на стороні клієнта); фото - лише ``fallback_photos``, тобто
-    ті, які НЕ вдалося показати прямо зображенням вище (решта фото вже
-    видно як справжній колаж, кнопка для них не потрібна); + кнопка
-    редагування."""
+    """Inline-кнопки під карткою: лише фолбек-посилання на фото/відео, які
+    НЕ вдалося (чи не було сенсу) показати напряму вище - тобто довантажені
+    з Google Drive (решта, показана прямо як колаж/відео, кнопки не
+    потребує) - + кнопка редагування."""
     buttons = [InlineKeyboardButton(text=f"🖼 Фото (посилання) {i + 1}", url=link) for i, link in enumerate(fallback_photos)]
-    buttons += [InlineKeyboardButton(text=f"🎬 Відео {i + 1}", url=link) for i, link in enumerate(videos)]
+    buttons += [InlineKeyboardButton(text=f"🎬 Відео {i + 1}", url=link) for i, link in enumerate(fallback_videos)]
 
     rows = [buttons[i:i + 3] for i in range(0, len(buttons), 3)]
     if show_edit:

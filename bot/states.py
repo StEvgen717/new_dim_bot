@@ -3,7 +3,7 @@ from aiogram.fsm.state import State, StatesGroup
 
 
 class AddObjectStates(StatesGroup):
-    """12 кроків майстра "Додати об'єкт" (ті самі кроки використовуються
+    """13 кроків майстра "Додати об'єкт" (ті самі кроки використовуються
     і для редагування - воно просто стартує з кроку ``price``)."""
 
     settlement = State()      # 1. Населений пункт
@@ -18,6 +18,7 @@ class AddObjectStates(StatesGroup):
     videos = State()          # 10. Відео
     address = State()         # 11. Адреса / локація
     link = State()            # 12. Посилання
+    tiktok = State()          # 13. Відео TikTok (посилання)
 
 
 class SearchStates(StatesGroup):

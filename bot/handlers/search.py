@@ -2,14 +2,18 @@
 
 Для кожного об'єкта (рядок аркуша з непорожньою колонкою "Тип угоди")
 спочатку надсилається "колаж" фото - справжні зображення в Telegram (одне
-фото або альбом, якщо декілька - стандартна поведінка Telegram), байти
-довантажуються з Google Drive. Відео свідомо залишені посиланнями (inline-
-кнопка, відкриває Google Drive, завантаження на стороні клієнта) - це
-набагато важчі файли, і тримати їх у пам'яті бота немає сенсу.
+фото або альбом, якщо декілька - стандартна поведінка Telegram). Формат
+збереженого значення (Telegram file_id чи лінк на Google Drive) визначається
+автоматично за виглядом рядка, незалежно від поточного ``MEDIA_STORAGE`` -
+file_id передається напряму (без завантаження), Drive-лінк довантажується
+байтами. Відео з Telegram file_id надсилаються так само напряму
+(``answer_video``, нуль пам'яті бота); відео, збережені як лінк на Google
+Drive, лишаються inline-кнопкою-посиланням - завантажувати важкі відеофайли
+на бота немає сенсу.
 
 Після фото йде текстова картка з основними даними + inline-кнопки:
-посилання на відео, (за потреби - fallback-посилання на фото, які не
-вдалося показати як зображення) та кнопка "✏️ Редагувати", яка веде у
+fallback-посилання на фото/відео, які не вдалося показати напряму (лише
+для справжніх Drive-лінків) та кнопка "✏️ Редагувати", яка веде у
 майстер додавання об'єкта з кроку "Ціна".
 
 Якщо об'єктів багато, вони показуються партіями по SEARCH_PAGE_SIZE
@@ -111,11 +115,16 @@ async def _send_batch(message: Message, state: FSMContext, settlement: str, obje
         )
 
 
-async def _fetch_photo_input(link: str) -> Optional[BufferedInputFile]:
+async def _fetch_photo_input(link: str) -> Optional[BufferedInputFile | str]:
+    """Повертає готовий для ``answer_photo``/``InputMediaPhoto`` об'єкт:
+    рядок (Telegram file_id - без жодного мережевого звернення, Telegram
+    сам роздає байти) або завантажені байти з Google Drive. Формат
+    визначається автоматично за виглядом збереженого значення, а не за
+    поточним ``MEDIA_STORAGE`` - перемикання налаштування в будь-який
+    момент не ламає раніше збережені об'єкти в іншому форматі."""
     file_id = gs.extract_drive_file_id(link)
-    if not file_id:
-        logger.warning("Не вдалося розпізнати ID Google Drive у посиланні на фото: %s", link)
-        return None
+    if file_id is None:
+        return link  # вже готовий Telegram file_id
     try:
         content = await gs.download_from_drive(file_id)
     except Exception:
@@ -129,14 +138,17 @@ async def _send_photos(message: Message, photos: list[str]) -> list[str]:
     якщо декілька - стандартна поведінка Telegram). Байти з Drive
     завантажуються послідовно (не паралельно - клієнт Google API не
     гарантує безпеку одночасних звернень з кількох потоків, саме це
-    спричиняло таймаути при завантаженні декількох файлів одночасно).
+    спричиняло таймаути при завантаженні декількох файлів одночасно);
+    Telegram file_id передаються одразу, без завантаження.
 
     Повертає список посилань, які НЕ вдалося показати як зображення -
-    щоб хоча б дати на них кнопку-посилання і нічого не втратити."""
+    щоб хоча б дати на них кнопку-посилання (лише для справжніх Drive-
+    посилань - Telegram file_id кнопкою-URL показати неможливо, такі при
+    збої просто пропускаються з логуванням, без фолбек-кнопки)."""
     if not photos:
         return []
 
-    inputs: list[BufferedInputFile] = []
+    inputs: list[BufferedInputFile | str] = []
     failed: list[str] = []
     for link in photos:
         file_input = await _fetch_photo_input(link)
@@ -157,9 +169,32 @@ async def _send_photos(message: Message, photos: list[str]) -> list[str]:
                 await message.answer_media_group([InputMediaPhoto(media=item) for item in chunk])
     except Exception:
         logger.exception("Не вдалося надіслати фото-колаж (%s фото)", len(inputs))
-        return photos  # не показалось як зображення - хоча б дамо посилання на все
+        # Кнопкою-URL можна показати лише справжні Drive-посилання -
+        # Telegram file_id так не покажеш, тож такі просто пропускаємо.
+        return failed + [link for link in photos if gs.extract_drive_file_id(link) is not None]
 
     return failed
+
+
+async def _send_videos(message: Message, videos: list[str]) -> list[str]:
+    """Відео, збережені як Telegram file_id, надсилаються напряму
+    (``answer_video``) - без завантаження, Telegram сам роздає байти, тож
+    пам'ять бота це не навантажує (на відміну від фото з Google Drive, тут
+    нема що завантажувати). Відео, збережені як лінк на Google Drive (інший
+    ``MEDIA_STORAGE`` або старі записи), лишаються кнопкою-посиланням, як і
+    раніше - завантажувати важкі відеофайли на бота немає сенсу.
+
+    Повертає список лінків для фолбек-кнопок (лише справжні Drive-лінки)."""
+    fallback: list[str] = []
+    for link in videos:
+        if gs.extract_drive_file_id(link) is not None:
+            fallback.append(link)  # Drive-лінк - як і раніше, лише кнопка
+            continue
+        try:
+            await message.answer_video(link)  # це Telegram file_id
+        except Exception:
+            logger.exception("Не вдалося надіслати відео напряму (можливо, застарілий file_id)")
+    return fallback
 
 
 async def _send_object_card(message: Message, settlement: str, row_idx: int, row: dict) -> None:
@@ -167,10 +202,11 @@ async def _send_object_card(message: Message, settlement: str, row_idx: int, row
     videos = gs.split_links(row.get("Відео", ""))
 
     fallback_photos = await _send_photos(message, photos)
+    fallback_videos = await _send_videos(message, videos)
 
     text = _format_card(settlement, row)
     token = edit_tokens.register(settlement, row_idx)
-    keyboard = object_card_keyboard(fallback_photos, videos, token)
+    keyboard = object_card_keyboard(fallback_photos, fallback_videos, token)
     await message.answer(text, reply_markup=keyboard, disable_web_page_preview=True)
 
 
@@ -183,6 +219,7 @@ def _format_card(settlement: str, row: dict) -> str:
     area_sot = row.get("Площа ділянки, сот.") or ""
     address = row.get("Адреса / локація") or ""
     link = row.get("Посилання") or ""
+    tiktok = row.get("Відео TikTok") or ""
     description = row.get("Опис") or ""
 
     lines = [f"🏷 {deal} • {kind} • {settlement}"]
@@ -198,6 +235,8 @@ def _format_card(settlement: str, row: dict) -> str:
         lines.append(f"📝 {description}")
     if link:
         lines.append(f"🔗 Оголошення: {link}")
+    if tiktok:
+        lines.append(f"🎵 Відео TikTok: {tiktok}")
     if not (row.get("Фото") or row.get("Відео")):
         lines.append("Фото/відео відсутні.")
     return "\n".join(lines)

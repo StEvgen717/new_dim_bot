@@ -1,4 +1,4 @@
-"""Майстер "➕ Додати об'єкт" (12 кроків) та редагування існуючого об'єкта.
+"""Майстер "➕ Додати об'єкт" (13 кроків) та редагування існуючого об'єкта.
 
 Кожен крок - окремий FSM-стан. Кнопка "🔙 Назад" повертає на попередній
 крок, "📝 Головне меню" (обробляється глобально в handlers/common.py)
@@ -24,7 +24,7 @@ from aiogram.types import CallbackQuery, Message
 
 import edit_tokens
 import google_services as gs
-from config import CURRENCIES, DEAL_TYPES, DEFAULT_STATUS, PROPERTY_TYPES, is_admin
+from config import CURRENCIES, DEAL_TYPES, DEFAULT_STATUS, MEDIA_STORAGE, PROPERTY_TYPES, is_admin
 from keyboards import (
     BTN_ADD_OBJECT,
     BTN_BACK,
@@ -42,7 +42,7 @@ router = Router(name="add_object")
 
 STEP_ORDER = [
     "settlement", "deal_type", "property_type", "price", "currency",
-    "area_sqm", "area_sot", "description", "photos", "videos", "address", "link",
+    "area_sqm", "area_sot", "description", "photos", "videos", "address", "link", "tiktok",
 ]
 STEP_NUMBER = {step: i + 1 for i, step in enumerate(STEP_ORDER)}
 STATE_BY_STEP = {step: getattr(AddObjectStates, step) for step in STEP_ORDER}
@@ -76,45 +76,45 @@ async def _render(step: str, data: dict, error: Optional[str] = None):
 
     if step == "settlement":
         settlements = await gs.list_settlements()
-        text = f"{prefix}Крок {n}/12. Оберіть населений пункт:"
+        text = f"{prefix}Крок {n}/13. Оберіть населений пункт:"
         return text, options_keyboard(settlements, back=False, main_menu=True)
 
     if step == "deal_type":
-        text = f"{prefix}Крок {n}/12. Оберіть тип угоди:"
+        text = f"{prefix}Крок {n}/13. Оберіть тип угоди:"
         return text, options_keyboard(DEAL_TYPES)
 
     if step == "property_type":
-        text = f"{prefix}Крок {n}/12. Оберіть тип об'єкта:"
+        text = f"{prefix}Крок {n}/13. Оберіть тип об'єкта:"
         return text, options_keyboard(PROPERTY_TYPES)
 
     if step == "price":
         text = (
-            f"{prefix}Крок {n}/12. Введіть ціну (наприклад: 115000) "
+            f"{prefix}Крок {n}/13. Введіть ціну (наприклад: 115000) "
             f"або натисніть «➡️ Далі», щоб залишити порожнім.{current('price', 'Поточна ціна')}"
         )
         return text, skip_keyboard()
 
     if step == "currency":
-        text = f"{prefix}Крок {n}/12. Оберіть валюту:{current('currency', 'Поточна валюта')}"
+        text = f"{prefix}Крок {n}/13. Оберіть валюту:{current('currency', 'Поточна валюта')}"
         return text, skip_keyboard(CURRENCIES)
 
     if step == "area_sqm":
         text = (
-            f"{prefix}Крок {n}/12. Введіть «Площа, м²» "
+            f"{prefix}Крок {n}/13. Введіть «Площа, м²» "
             f"або натисніть «➡️ Далі», щоб залишити порожнім.{current('area_sqm', 'Поточна площа, м²')}"
         )
         return text, skip_keyboard()
 
     if step == "area_sot":
         text = (
-            f"{prefix}Крок {n}/12. Введіть «Площа ділянки, сот.» "
+            f"{prefix}Крок {n}/13. Введіть «Площа ділянки, сот.» "
             f"або натисніть «➡️ Далі», щоб залишити порожнім.{current('area_sot', 'Поточна площа ділянки')}"
         )
         return text, skip_keyboard()
 
     if step == "description":
         text = (
-            f"{prefix}Крок {n}/12. Введіть опис об'єкта "
+            f"{prefix}Крок {n}/13. Введіть опис об'єкта "
             f"або натисніть «➡️ Далі».{current('description', 'Поточний опис')}"
         )
         return text, skip_keyboard()
@@ -122,7 +122,7 @@ async def _render(step: str, data: dict, error: Optional[str] = None):
     if step == "photos":
         count = len(data.get("photos") or [])
         text = (
-            f"{prefix}Крок {n}/12. Надішліть фото об'єкта (можна декілька, одне за одним). "
+            f"{prefix}Крок {n}/13. Надішліть фото об'єкта (можна декілька, одне за одним). "
             f"Додано: {count}.\nКоли завершите - натисніть «➡️ Далі»."
         )
         return text, skip_keyboard()
@@ -130,22 +130,29 @@ async def _render(step: str, data: dict, error: Optional[str] = None):
     if step == "videos":
         count = len(data.get("videos") or [])
         text = (
-            f"{prefix}Крок {n}/12. Надішліть відео об'єкта (можна декілька). "
+            f"{prefix}Крок {n}/13. Надішліть відео об'єкта (можна декілька). "
             f"Додано: {count}.\nКоли завершите - натисніть «➡️ Далі»."
         )
         return text, skip_keyboard()
 
     if step == "address":
         text = (
-            f"{prefix}Крок {n}/12. Надішліть адресу/локацію текстом, геолокацією "
+            f"{prefix}Крок {n}/13. Надішліть адресу/локацію текстом, геолокацією "
             f"або посиланням Google Maps, або натисніть «➡️ Далі».{current('address')}"
         )
         return text, skip_keyboard()
 
     if step == "link":
         text = (
-            f"{prefix}Крок {n}/12. Надішліть посилання на оголошення "
-            f"або натисніть «✅ Зберегти».{current('link')}"
+            f"{prefix}Крок {n}/13. Надішліть посилання на оголошення "
+            f"або натисніть «➡️ Далі».{current('link')}"
+        )
+        return text, skip_keyboard()
+
+    if step == "tiktok":
+        text = (
+            f"{prefix}Крок {n}/13. Надішліть посилання на відео TikTok "
+            f"або натисніть «✅ Зберегти».{current('tiktok', 'Поточне відео TikTok')}"
         )
         return text, finish_keyboard()
 
@@ -365,28 +372,41 @@ _upload_locks: defaultdict[int, asyncio.Lock] = defaultdict(asyncio.Lock)
 async def _handle_media_upload(message: Message, state: FSMContext, field: str, tg_file, mime_type: str, ext: str) -> None:
     async with _upload_locks[message.from_user.id]:
         data = await state.get_data()
-        settlement = data.get("settlement", "object")
-        deal_type = data.get("deal_type", "")
-        index = len(data.get(field) or []) + 1
-        filename = f"{settlement}_{deal_type}_{field}_{index}_{tg_file.file_unique_id}.{ext}".replace(" ", "_")
+        label = "Фото" if field == "photos" else "Відео"
 
-        status_msg = await message.answer("⏳ Завантажую у Google Drive...")
-        try:
-            buffer = await message.bot.download(tg_file)
-            file_id, link = await gs.upload_to_drive(buffer.read(), filename, mime_type)
-        except Exception:
-            logger.exception("Не вдалося завантажити %s у Google Drive (user_id=%s)", field, message.from_user.id)
-            await status_msg.edit_text("⚠️ Не вдалося завантажити файл у Google Drive. Спробуйте ще раз.")
+        if MEDIA_STORAGE == "googledrive":
+            settlement = data.get("settlement", "object")
+            deal_type = data.get("deal_type", "")
+            index = len(data.get(field) or []) + 1
+            filename = f"{settlement}_{deal_type}_{field}_{index}_{tg_file.file_unique_id}.{ext}".replace(" ", "_")
+
+            status_msg = await message.answer("⏳ Завантажую у Google Drive...")
+            try:
+                buffer = await message.bot.download(tg_file)
+                drive_id, value = await gs.upload_to_drive(buffer.read(), filename, mime_type)
+            except Exception:
+                logger.exception("Не вдалося завантажити %s у Google Drive (user_id=%s)", field, message.from_user.id)
+                await status_msg.edit_text("⚠️ Не вдалося завантажити файл у Google Drive. Спробуйте ще раз.")
+                return
+
+            uploads = list(data.get("new_upload_ids") or [])
+            uploads.append(drive_id)
+            await state.update_data(new_upload_ids=uploads)
+
+            items = list(data.get(field) or [])
+            items.append(value)
+            await state.update_data(**{field: items})
+            await status_msg.edit_text(f"✅ {label} додано ({len(items)}). Надішліть ще або натисніть «➡️ Далі».")
             return
 
+        # MEDIA_STORAGE="telegram" (за замовчуванням) - file_id вже готовий
+        # у самому повідомленні, жодного завантаження/мережевого звернення
+        # не потрібно - і, відповідно, нема що класти в new_upload_ids
+        # (нічого видаляти з Google Drive при скасуванні майстра не буде).
         items = list(data.get(field) or [])
-        items.append(link)
-        uploads = list(data.get("new_upload_ids") or [])
-        uploads.append(file_id)
-        await state.update_data(**{field: items, "new_upload_ids": uploads})
-
-        label = "Фото" if field == "photos" else "Відео"
-        await status_msg.edit_text(f"✅ {label} додано ({len(items)}). Надішліть ще або натисніть «➡️ Далі».")
+        items.append(tg_file.file_id)
+        await state.update_data(**{field: items})
+        await message.answer(f"✅ {label} додано ({len(items)}). Надішліть ще або натисніть «➡️ Далі».")
 
 
 @router.message(AddObjectStates.photos, F.photo)
@@ -421,7 +441,7 @@ async def step_videos_invalid(message: Message, state: FSMContext) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Крок 11-12: адреса/локація, посилання (= завершення)
+# Крок 11-13: адреса/локація, посилання, відео TikTok (= завершення)
 # ---------------------------------------------------------------------------
 
 @router.message(AddObjectStates.address, F.text == BTN_NEXT)
@@ -448,20 +468,36 @@ async def step_address_invalid(message: Message, state: FSMContext) -> None:
     await show_step(message, state, "address", error="Надішліть текст, геолокацію або натисніть «➡️ Далі».")
 
 
-@router.message(AddObjectStates.link, F.text == BTN_SAVE)
-async def step_link_save(message: Message, state: FSMContext) -> None:
-    await _finalize(message, state)
+@router.message(AddObjectStates.link, F.text == BTN_NEXT)
+async def step_link_skip(message: Message, state: FSMContext) -> None:
+    await show_step(message, state, "tiktok")
 
 
 @router.message(AddObjectStates.link, F.text)
 async def step_link_value(message: Message, state: FSMContext) -> None:
     await state.update_data(link=message.text.strip())
-    await _finalize(message, state)
+    await show_step(message, state, "tiktok")
 
 
 @router.message(AddObjectStates.link)
 async def step_link_invalid(message: Message, state: FSMContext) -> None:
-    await show_step(message, state, "link", error="Надішліть посилання текстом або натисніть «✅ Зберегти».")
+    await show_step(message, state, "link", error="Надішліть посилання текстом або натисніть «➡️ Далі».")
+
+
+@router.message(AddObjectStates.tiktok, F.text == BTN_SAVE)
+async def step_tiktok_save(message: Message, state: FSMContext) -> None:
+    await _finalize(message, state)
+
+
+@router.message(AddObjectStates.tiktok, F.text)
+async def step_tiktok_value(message: Message, state: FSMContext) -> None:
+    await state.update_data(tiktok=message.text.strip())
+    await _finalize(message, state)
+
+
+@router.message(AddObjectStates.tiktok)
+async def step_tiktok_invalid(message: Message, state: FSMContext) -> None:
+    await show_step(message, state, "tiktok", error="Надішліть посилання текстом або натисніть «✅ Зберегти».")
 
 
 # ---------------------------------------------------------------------------
@@ -489,6 +525,8 @@ def _build_summary(settlement: str, field_values: dict, title: str) -> str:
         lines.append(f"📍 Адреса/локація: {field_values['Адреса / локація']}")
     if field_values.get("Посилання"):
         lines.append(f"🔗 Посилання: {field_values['Посилання']}")
+    if field_values.get("Відео TikTok"):
+        lines.append(f"🎵 Відео TikTok: {field_values['Відео TikTok']}")
 
     photos_n = len(gs.split_links(field_values.get("Фото", "")))
     videos_n = len(gs.split_links(field_values.get("Відео", "")))
@@ -512,6 +550,7 @@ async def _finalize(message: Message, state: FSMContext) -> None:
         "Фото": "\n".join(data.get("photos") or []),
         "Відео": "\n".join(data.get("videos") or []),
         "Посилання": data.get("link") or "",
+        "Відео TikTok": data.get("tiktok") or "",
         "Опис": data.get("description") or "",
     }
 
@@ -587,6 +626,7 @@ async def start_edit(callback: CallbackQuery, state: FSMContext) -> None:
         videos=gs.split_links(row.get("Відео", "")),
         address=row.get("Адреса / локація") or None,
         link=row.get("Посилання") or None,
+        tiktok=row.get("Відео TikTok") or None,
         new_upload_ids=[],
     )
 
