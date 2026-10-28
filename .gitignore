@@ -1,6 +1,7 @@
 # ===== Секрети / локальна конфігурація (ніколи не комітити!) =====
 .env
 google-oauth-client.json
+google-service-account.json
 client_secret_*.json
 token.json
 credentials.json

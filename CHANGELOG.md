@@ -89,6 +89,11 @@ Estate Atlas (повна переробка бота під новий доме�
 * "🔎 Пошук" тепер показує й відео напряму в чаті (`answer_video`), якщо
   воно збережене як Telegram `file_id` - кнопка-посилання лишається лише
   для відео, завантажених на Google Drive
+* доступ до Google Таблиці прив'язаний до `MEDIA_STORAGE`: `telegram` -
+  сервісний акаунт (`GOOGLE_SERVICE_ACCOUNT_FILE`, без `token.json` і без
+  7-денного OAuth Testing); `googledrive` - як раніше OAuth `token.json` +
+  завантаження медіа на Drive; README: покрокове створення SA і «Поділитися»
+  таблицею з `client_email`
 
 v0.0.2
 =========================

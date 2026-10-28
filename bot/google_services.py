@@ -1,13 +1,13 @@
 """Інтеграція з Google Sheets та Google Drive для бота Estate Atlas.
 
-Автентифікація - через OAuth-клієнт типу "Desktop app" (``gspread.oauth``):
-при першому запуску відкриється браузер із запитом увійти Google-акаунтом,
-який має доступ до таблиці й папки на Drive. Після підтвердження токен
-кешується у файлі ``GOOGLE_OAUTH_TOKEN_FILE`` (``token.json``) і надалі
-оновлюється автоматично, без повторного входу.
+Тип доступу до Google залежить від ``MEDIA_STORAGE`` (див. ``config``):
 
-Ті самі credentials використовуються і для gspread (Sheets), і для
-Google Drive API - окремий сервісний акаунт не потрібен.
+- ``telegram`` - Google Sheets через **сервісний акаунт** (JSON-ключ,
+  без браузера й без ``token.json``); Drive API лише read-only для
+  показу старих фото з лінками на Drive (якщо такі є в таблиці).
+- ``googledrive`` - Sheets і Drive через **OAuth Desktop app**
+  (``token.json``), як у першій версії бота - потрібен для завантаження
+  нових фото/відео на Drive.
 """
 from __future__ import annotations
 
@@ -19,8 +19,10 @@ from typing import Optional
 
 import gspread
 from gspread.auth import DEFAULT_SCOPES, local_server_flow
-from gspread.exceptions import WorksheetNotFound
+from gspread.exceptions import APIError, WorksheetNotFound
 from gspread.utils import rowcol_to_a1
+from google.auth.exceptions import RefreshError
+from google.oauth2 import service_account as google_service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 from tenacity import retry, stop_after_attempt, wait_fixed
@@ -30,8 +32,10 @@ from config import (
     GOOGLE_DRIVE_FOLDER_ID,
     GOOGLE_OAUTH_CLIENT_FILE,
     GOOGLE_OAUTH_TOKEN_FILE,
+    GOOGLE_SERVICE_ACCOUNT_FILE,
     GOOGLE_SHEET_NAME,
     GOOGLE_SPREADSHEET_ID,
+    MEDIA_STORAGE,
     SHEET_HEADERS,
 )
 
@@ -41,14 +45,83 @@ logger = logging.getLogger(__name__)
 # та Drive інколи повертають тимчасові 429/5xx помилки.
 _retry = retry(stop=stop_after_attempt(3), wait=wait_fixed(2), reraise=True)
 
-_gc = gspread.oauth(
-    scopes=DEFAULT_SCOPES,  # spreadsheets + drive (read/write)
-    flow=local_server_flow,
-    credentials_filename=str(GOOGLE_OAUTH_CLIENT_FILE),
-    authorized_user_filename=str(GOOGLE_OAUTH_TOKEN_FILE),
+_SHEETS_SCOPE = ["https://www.googleapis.com/auth/spreadsheets"]
+_DRIVE_READONLY_SCOPE = ["https://www.googleapis.com/auth/drive.readonly"]
+
+_OAUTH_TOKEN_HELP = (
+    "Google OAuth (token.json) застарів або відкликаний. "
+    "Видаліть token.json і перезапустіть бота з браузером (README: «Перший запуск»), "
+    "або перемкніть MEDIA_STORAGE=telegram і налаштуйте сервісний акаунт (README: "
+    "«Сервісний акаунт для MEDIA_STORAGE=telegram»)."
 )
-_spreadsheet = _gc.open_by_key(GOOGLE_SPREADSHEET_ID)
-_drive = build("drive", "v3", credentials=_gc.http_client.auth, cache_discovery=False)
+
+
+def _init_google() -> tuple[gspread.Client, gspread.Spreadsheet, object]:
+    if MEDIA_STORAGE == "googledrive":
+        return _init_oauth()
+    if MEDIA_STORAGE == "telegram":
+        return _init_service_account()
+    raise RuntimeError(
+        f"Невідоме MEDIA_STORAGE='{MEDIA_STORAGE}'. "
+        "Дозволено: telegram, googledrive (або google_drive)."
+    )
+
+
+def _init_oauth() -> tuple[gspread.Client, gspread.Spreadsheet, object]:
+    try:
+        gc = gspread.oauth(
+            scopes=DEFAULT_SCOPES,
+            flow=local_server_flow,
+            credentials_filename=str(GOOGLE_OAUTH_CLIENT_FILE),
+            authorized_user_filename=str(GOOGLE_OAUTH_TOKEN_FILE),
+        )
+        spreadsheet = gc.open_by_key(GOOGLE_SPREADSHEET_ID)
+    except RefreshError as exc:
+        raise RuntimeError(_OAUTH_TOKEN_HELP) from exc
+
+    drive = build("drive", "v3", credentials=gc.http_client.auth, cache_discovery=False)
+    logger.info(
+        "Google: OAuth (token.json), таблиця '%s', MEDIA_STORAGE=googledrive.",
+        spreadsheet.title,
+    )
+    return gc, spreadsheet, drive
+
+
+def _init_service_account() -> tuple[gspread.Client, gspread.Spreadsheet, object]:
+    if not GOOGLE_SERVICE_ACCOUNT_FILE.is_file():
+        raise RuntimeError(
+            f"Для MEDIA_STORAGE=telegram потрібен JSON-ключ сервісного акаунта: "
+            f"{GOOGLE_SERVICE_ACCOUNT_FILE} (файл не знайдено). "
+            "Створення ключа та доступ до таблиці - README: "
+            "«Сервісний акаунт для MEDIA_STORAGE=telegram»."
+        )
+
+    gc = gspread.service_account(
+        filename=str(GOOGLE_SERVICE_ACCOUNT_FILE),
+        scopes=_SHEETS_SCOPE,
+    )
+    try:
+        spreadsheet = gc.open_by_key(GOOGLE_SPREADSHEET_ID)
+    except APIError as exc:
+        raise RuntimeError(
+            "Сервісний акаунт не має доступу до таблиці. Відкрийте Google Таблицю → "
+            "«Надати доступ» → додайте email сервісного акаунта (поле client_email у JSON) "
+            "з правами «Редактор». Детальніше - README."
+        ) from exc
+
+    sa_creds = google_service_account.Credentials.from_service_account_file(
+        str(GOOGLE_SERVICE_ACCOUNT_FILE),
+        scopes=_DRIVE_READONLY_SCOPE,
+    )
+    drive = build("drive", "v3", credentials=sa_creds, cache_discovery=False)
+    logger.info(
+        "Google: сервісний акаунт, таблиця '%s', MEDIA_STORAGE=telegram.",
+        spreadsheet.title,
+    )
+    return gc, spreadsheet, drive
+
+
+_gc, _spreadsheet, _drive = _init_google()
 
 if GOOGLE_SHEET_NAME and _spreadsheet.title != GOOGLE_SHEET_NAME:
     logger.warning(
@@ -56,8 +129,6 @@ if GOOGLE_SHEET_NAME and _spreadsheet.title != GOOGLE_SHEET_NAME:
         "Перевірте GOOGLE_SPREADSHEET_ID у .env, якщо це не очікувано.",
         GOOGLE_SHEET_NAME, _spreadsheet.title,
     )
-
-logger.info("Google Sheets/Drive: авторизація успішна, таблиця '%s'.", _spreadsheet.title)
 
 
 # ---------------------------------------------------------------------------
@@ -145,17 +216,11 @@ def _append_object_sync(settlement: str, field_values: dict[str, str]) -> int:
     match = re.search(r"![A-Za-z]+(\d+)", updated_range)
     if match:
         return int(match.group(1))
-    # fallback, якщо API не повернув updatedRange (малоймовірно)
     return len(worksheet.get_all_values())
 
 
 async def append_object(settlement: str, field_values: dict[str, str]) -> int:
-    """Додає новий рядок об'єкта в аркуш населеного пункту.
-
-    ``field_values`` - словник {назва_колонки: значення}; колонки, яких
-    немає в словнику, залишаються порожніми.
-    Повертає номер щойно створеного рядка (1-based, з урахуванням заголовка).
-    """
+    """Додає новий рядок об'єкта в аркуш населеного пункту."""
     return await asyncio.to_thread(_append_object_sync, settlement, field_values)
 
 
@@ -185,8 +250,6 @@ def _update_object_sync(settlement: str, row_idx: int, field_values: dict[str, s
 
 
 async def update_object(settlement: str, row_idx: int, field_values: dict[str, str]) -> None:
-    """Оновлює лише перелічені в ``field_values`` колонки конкретного рядка,
-    решту колонок (напр. "Коментар", "Статус") залишає незмінними."""
     await asyncio.to_thread(_update_object_sync, settlement, row_idx, field_values)
 
 
@@ -207,8 +270,6 @@ def _get_object_sync(settlement: str, row_idx: int) -> Optional[dict[str, str]]:
 
 
 async def get_object(settlement: str, row_idx: int) -> Optional[dict[str, str]]:
-    """Повертає {назва_колонки: значення} для рядка або None, якщо рядок
-    порожній / видалений."""
     return await asyncio.to_thread(_get_object_sync, settlement, row_idx)
 
 
@@ -237,17 +298,18 @@ def _list_objects_sync(settlement: str) -> list[tuple[int, dict[str, str]]]:
 
 
 async def list_objects(settlement: str) -> list[tuple[int, dict[str, str]]]:
-    """Повертає [(номер_рядка, {колонка: значення})] для рядків аркуша,
-    де колонка "Тип угоди" не порожня (критерій пошуку зі специфікації)."""
     return await asyncio.to_thread(_list_objects_sync, settlement)
 
 
 # ---------------------------------------------------------------------------
-# Google Drive: завантаження фото/відео
+# Google Drive: завантаження фото/відео (лише MEDIA_STORAGE=googledrive)
 # ---------------------------------------------------------------------------
 
 @_retry
 def _upload_to_drive_sync(content: bytes, filename: str, mime_type: str) -> tuple[str, str]:
+    if MEDIA_STORAGE != "googledrive":
+        raise RuntimeError("Завантаження на Drive доступне лише при MEDIA_STORAGE=googledrive.")
+
     media = MediaIoBaseUpload(BytesIO(content), mimetype=mime_type, resumable=True)
     file = _drive.files().create(
         body={"name": filename, "parents": [GOOGLE_DRIVE_FOLDER_ID]},
@@ -256,8 +318,6 @@ def _upload_to_drive_sync(content: bytes, filename: str, mime_type: str) -> tupl
     ).execute()
     file_id = file["id"]
 
-    # Робимо файл доступним за посиланням, щоб клієнти могли відкрити й
-    # завантажити фото/відео прямо з браузера (без доступу до самого Google-акаунта бота).
     try:
         _drive.permissions().create(
             fileId=file_id,
@@ -272,10 +332,6 @@ def _upload_to_drive_sync(content: bytes, filename: str, mime_type: str) -> tupl
 
 
 async def upload_to_drive(content: bytes, filename: str, mime_type: str) -> tuple[str, str]:
-    """Завантажує байти файлу в папку GOOGLE_DRIVE_FOLDER_ID.
-
-    Повертає (file_id, link_для_перегляду).
-    """
     return await asyncio.to_thread(_upload_to_drive_sync, content, filename, mime_type)
 
 
@@ -286,9 +342,6 @@ _DRIVE_ID_PATTERNS = (
 
 
 def extract_drive_file_id(link: str) -> Optional[str]:
-    """Витягує ID файлу Google Drive з посилання (``.../file/d/<ID>/view``,
-    ``...?id=<ID>`` тощо - основні формати, які повертає Drive API або які
-    могли вставити вручну)."""
     link = (link or "").strip()
     for pattern in _DRIVE_ID_PATTERNS:
         match = pattern.search(link)
@@ -303,13 +356,13 @@ def _download_from_drive_sync(file_id: str) -> bytes:
 
 
 async def download_from_drive(file_id: str) -> bytes:
-    """Завантажує байти файлу з Google Drive (щоб показати фото прямо в
-    Telegram, а не лише посиланням)."""
     return await asyncio.to_thread(_download_from_drive_sync, file_id)
 
 
 @_retry
 def _delete_from_drive_sync(file_id: str) -> None:
+    if MEDIA_STORAGE != "googledrive":
+        return
     _drive.files().delete(fileId=file_id).execute()
 
 
@@ -318,8 +371,6 @@ async def delete_from_drive(file_id: str) -> None:
 
 
 async def cleanup_uploads(file_ids: list[str]) -> None:
-    """Видаляє з Drive файли, завантажені в межах скасованої/незбереженої
-    сесії (щоб не накопичувалось сміття в папці), ігноруючи помилки."""
     for file_id in file_ids:
         try:
             await delete_from_drive(file_id)

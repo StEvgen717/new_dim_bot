@@ -28,8 +28,7 @@ GOOGLE_SPREADSHEET_ID = os.getenv("GOOGLE_SPREADSHEET_ID", "")
 GOOGLE_SHEET_NAME = os.getenv("GOOGLE_SHEET_NAME", "")
 GOOGLE_DRIVE_FOLDER_ID = os.getenv("GOOGLE_DRIVE_FOLDER_ID", "")
 
-# OAuth "Desktop app" client secret + кешований токен користувача.
-# За замовчуванням обидва файли лежать поруч із цим модулем (у bot/).
+# OAuth "Desktop app" - лише для MEDIA_STORAGE=googledrive (Sheets + Drive).
 GOOGLE_OAUTH_CLIENT_FILE = Path(
     os.getenv("GOOGLE_OAUTH_CLIENT_FILE", str(BASE_DIR / "google-oauth-client.json"))
 )
@@ -37,20 +36,21 @@ GOOGLE_OAUTH_TOKEN_FILE = Path(
     os.getenv("GOOGLE_OAUTH_TOKEN_FILE", str(BASE_DIR / "token.json"))
 )
 
-# Перший (одноразовий) вхід Google-акаунтом завжди йде через локальний
-# браузер (gspread.auth.local_server_flow) - альтернативний "console"-флоу
-# Google відключив ще в 2022-му, а gspread прибрав його з коду. Для
-# headless-сервера без браузера - див. README ("Перший запуск").
+# JSON-ключ сервісного акаунта - лише для MEDIA_STORAGE=telegram (Sheets;
+# Drive лише read-only для старих фото з лінками, якщо такі є в таблиці).
+GOOGLE_SERVICE_ACCOUNT_FILE = Path(
+    os.getenv(
+        "GOOGLE_SERVICE_ACCOUNT_FILE",
+        str(BASE_DIR / "google-service-account.json"),
+    )
+)
 
-# Де зберігати фото/відео з майстра "Додати об'єкт":
-# - "telegram" (за замовчуванням) - лише Telegram file_id, без завантажень
-#   на сторонні сервіси; немає лімітів за обсягом, не навантажує диск/API,
-#   але Telegram офіційно не гарантує довічне зберігання медіа бота;
-# - "google_drive" - файл довантажується з Telegram і перезавантажується
-#   на Google Drive, у таблицю йде лінк (як було раніше).
-# Перемикати можна в будь-який момент - старі записи в іншому форматі
-# показуються коректно незалежно від поточного значення (визначається
-# автоматично за виглядом збереженого значення, не за цим налаштуванням).
+# Де зберігати фото/відео з майстра "Додати об'єкт" і який тип доступу до Google:
+# - "telegram" (за замовчуванням) - file_id у таблиці; авторизація Sheets через
+#   сервісний акаунт (без token.json і без 7-денного OAuth Testing);
+# - "googledrive" - завантаження на Drive; авторизація через OAuth token.json.
+# Формат уже збережених значень у таблиці визначається автоматично при показі
+# в пошуку, незалежно від поточного MEDIA_STORAGE.
 MEDIA_STORAGE = (
     os.getenv("MEDIA_STORAGE", "telegram").strip().lower().replace("_", "").replace("-", "")
 )

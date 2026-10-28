@@ -13,28 +13,61 @@ Telegram-бот для ведення каталогу об'єктів неру�
 ## 🔧 Налаштування Google Cloud (один раз)
 
 1. Створіть проєкт у [Google Cloud Console](https://console.cloud.google.com/).
-2. У **APIs & Services → Library** увімкніть:
-   - **Google Sheets API**
-   - **Google Drive API** (потрібен лише якщо плануєте `MEDIA_STORAGE=googledrive`;
-     для `MEDIA_STORAGE=telegram` можна не увімкнути)
-3. У **APIs & Services → OAuth consent screen** налаштуйте екран згоди:
-   - User type: **External**;
-   - додайте свій Google-акаунт (той, що має доступ до таблиці й папки на
-     Drive) до списку **Test users**.
-4. У **APIs & Services → Credentials** натисніть **+ CREATE CREDENTIALS →
-   OAuth client ID**, тип застосунку - **Desktop app**.
-5. Завантажте JSON цього клієнта, перейменуйте на `google-oauth-client.json`
-   і покладіть у папку `bot/` (поруч із `main.py`).
-6. Створіть Google Таблицю (кожен аркуш - населений пункт, див. структуру
-   нижче). Скопіюйте її ID у `.env` (частина URL після `/d/`). Якщо
-   плануєте `MEDIA_STORAGE=googledrive` - додатково створіть папку на
-   Google Drive для фото/відео і скопіюйте її ID (частина URL після
-   `/folders/`); для `MEDIA_STORAGE=telegram` папка не потрібна.
+2. У **APIs & Services → Library** увімкніть **Google Sheets API** (обов'язково
+   для будь-якого режиму).
+3. Створіть Google Таблицю (кожен аркуш - населений пункт, див. структуру
+   нижче) і скопіюйте її ID у `.env` (`GOOGLE_SPREADSHEET_ID` - частина URL
+   після `/d/`).
 
-> Сервісний акаунт тут **не потрібен**: бот авторизується як ваш звичайний
-> Google-акаунт через OAuth (детальніше - у розділі "Перший запуск" нижче).
-> Тож таблицю і папку достатньо просто мати доступними тому акаунту, яким
-> ви увійдете при першому запуску бота.
+Далі залежить від `MEDIA_STORAGE` у `.env`:
+
+| `MEDIA_STORAGE` | Доступ до Google Таблиці | Фото/відео в майстрі |
+|---|---|---|
+| **`telegram`** (рекомендовано) | **Сервісний акаунт** - без `token.json`, без 7-денного OAuth | Telegram `file_id` у комірках |
+| **`googledrive`** | OAuth `token.json` + `google-oauth-client.json` | Завантаження на Google Drive |
+
+Нижче - покрокові інструкції для обох варіантів.
+
+### Сервісний акаунт для `MEDIA_STORAGE=telegram`
+
+Підходить для сервера/Jenkins: бот працює **місяцями без браузера** і без
+оновлення `token.json`.
+
+1. У тому ж проєкті Google Cloud увімкніть **Google Drive API** (не для
+   завантаження нових файлів, а лише щоб у пошуку можна було показати **старі**
+   фото з лінками `drive.google.com`, якщо такі рядки ще є в таблиці).
+2. **IAM & Admin → Service Accounts** → **+ CREATE SERVICE ACCOUNT**.
+   - Service account name: напр. `estate-atlas-bot`;
+   - натисніть **Create and Continue** → **Done** (ролі на рівні проєкту
+     для Sheets **не обов'язкові** - доступ дамо через «Поділитися» таблицею).
+3. Відкрийте створений акаунт → вкладка **Keys** → **Add key** → **Create new
+   key** → тип **JSON** → завантажиться файл.
+4. Перейменуйте його на `google-service-account.json` і покладіть у `bot/`
+   (поруч із `main.py`). У `.env` вкажіть:
+   `GOOGLE_SERVICE_ACCOUNT_FILE=google-service-account.json`.
+5. Відкрийте завантажений JSON у текстовому редакторі і знайдіть поле
+   **`client_email`** - виглядає як `something@your-project.iam.gserviceaccount.com`.
+6. Відкрийте вашу **Google Таблицю** (у браузері, під своїм акаунтом) →
+   кнопка **Надати доступ** / **Share** → вставте цей `client_email` → роль
+   **Редактор** (Editor) → надіслати / зберегти.
+7. У `.env` поставте `MEDIA_STORAGE=telegram`. Файли `token.json` і
+   `google-oauth-client.json` для цього режиму **не потрібні** (можна не
+   класти на сервер).
+
+Перевірка: з папки `bot/` запустіть `python main.py` - у логах має бути
+рядок на кшталт «сервісний акаунт, таблиця '…'». Якщо помилка доступу -
+перевірте крок 6 (email саме з JSON, права Редактор).
+
+### OAuth для `MEDIA_STORAGE=googledrive`
+
+1. Увімкніть **Google Drive API** (якщо ще не увімкнено).
+2. **APIs & Services → OAuth consent screen**: User type **External**, додайте
+   свій Google-акаунт у **Test users**.
+3. **Credentials → + CREATE CREDENTIALS → OAuth client ID** → **Desktop app**
+   → завантажте JSON → `bot/google-oauth-client.json`.
+4. Створіть папку на Drive для фото/відео, її ID - у `GOOGLE_DRIVE_FOLDER_ID`.
+5. У `.env`: `MEDIA_STORAGE=googledrive`. Перший запуск - розділ **«Перший
+   запуск»** нижче (`token.json`).
 
 ## ⚙️ Файл `.env`
 
@@ -47,16 +80,17 @@ Telegram-бот для ведення каталогу об'єктів неру�
 | `GOOGLE_PROJECT_ID` | ID проєкту в Google Cloud |
 | `GOOGLE_SPREADSHEET_ID` | ID Google Таблиці (з її URL) |
 | `GOOGLE_SHEET_NAME` | назва таблиці (для перевірки/логів) |
-| `GOOGLE_DRIVE_FOLDER_ID` | ID папки на Drive для фото/відео (лише для `MEDIA_STORAGE=googledrive`) |
-| `GOOGLE_OAUTH_CLIENT_FILE` | шлях до `google-oauth-client.json` (за замовчуванням - поруч із `main.py`) |
-| `GOOGLE_OAUTH_TOKEN_FILE` | шлях до кешованого токена `token.json` (створюється автоматично) |
-| `MEDIA_STORAGE` | `telegram` (за замовчуванням, лише file_id) або `googledrive` (завантаження на Drive) - див. "➕ Додати об'єкт" нижче |
+| `MEDIA_STORAGE` | `telegram` (за замовчуванням) або `googledrive` - також вибирає **тип входу в Google** (див. таблицю вище) |
+| `GOOGLE_SERVICE_ACCOUNT_FILE` | шлях до JSON-ключа SA (лише для `MEDIA_STORAGE=telegram`, за замовч. `google-service-account.json`) |
+| `GOOGLE_DRIVE_FOLDER_ID` | ID папки на Drive (лише для `MEDIA_STORAGE=googledrive`) |
+| `GOOGLE_OAUTH_CLIENT_FILE` | шлях до `google-oauth-client.json` (лише для `googledrive`) |
+| `GOOGLE_OAUTH_TOKEN_FILE` | шлях до `token.json` (лише для `googledrive`, створюється при першому вході) |
 | `ADMINS` | Telegram ID через кому, яким дозволено "Додати об'єкт"/"Редагувати". Порожньо = дозволено всім |
 | `SEARCH_PAGE_SIZE` | скільки об'єктів показувати за раз у пошуку (за замовчуванням 5) |
 | `EXCLUDED_SHEETS` | назви аркушів через кому, які існують у таблиці, але НЕ є населеними пунктами (довідники, зведені каталоги тощо) - не показуються в боті |
 
-⚠️ **Ніколи не комітьте** `.env`, `google-oauth-client.json` і `token.json` -
-вони вже додані до `.gitignore`.
+⚠️ **Ніколи не комітьте** `.env`, `google-service-account.json`,
+`google-oauth-client.json` і `token.json` - вони в `.gitignore`.
 
 ## 🐍 Встановлення Python (якщо ще не встановлено)
 
@@ -168,6 +202,9 @@ python main.py
 
 ### Перший запуск (одноразово) - вхід Google-акаунтом
 
+> Потрібно **лише** якщо `MEDIA_STORAGE=googledrive`. Для `telegram` див.
+> розділ «Сервісний акаунт» вище - браузер не потрібен.
+
 Авторизація - через OAuth "Desktop app" (`gspread.auth.local_server_flow`):
 при запуску `python main.py` бот сам відкриває браузер на цій же машині із
 запитом увійти Google-акаунтом, що має доступ до таблиці й папки на Drive.
@@ -201,11 +238,10 @@ python main.py
 Якщо потрібно увійти іншим акаунтом або змінити права доступу - видаліть
 `token.json` і запустіть бота знову (повторно пройде той самий сценарій).
 
-> ⚠️ Поки проєкт у Google Cloud має статус "Testing" (не опублікований),
-> авторизація діє лише 7 днів - після цього `token.json` застаріє і вхід
-> доведеться повторити. Щоб цього уникнути на постійно працюючому сервері -
-> опублікуйте застосунок (Google Auth Platform → Audience → Publish app),
-> один раз прийнявши попередження "Google не перевірила цю програму".
+> ⚠️ Це стосується **лише** `MEDIA_STORAGE=googledrive`: у режимі Testing
+> OAuth діє ~7 днів, потім `token.json` треба оновлювати (видалити файл і
+> знову пройти вхід). На сервері без браузера зручніше **`MEDIA_STORAGE=telegram`**
+> і сервісний акаунт - без цього ліміту.
 
 ### Постійна робота на Ubuntu Server (systemd)
 
@@ -270,8 +306,12 @@ journalctl -u estate-atlas-bot -f        # дивитись логи нажив�
 
 #### Де зберігаються фото/відео (`MEDIA_STORAGE`)
 
-Налаштування `MEDIA_STORAGE` у `.env` перемикає, куди йдуть фото/відео з
-кроків 9-10 (не впливає на TikTok - це завжди просто текстове посилання):
+Одне й те саме налаштування визначає і **медіа**, і **вхід у Google**:
+`telegram` → сервісний акаунт для таблиці; `googledrive` → OAuth
+`token.json` (див. таблицю на початку README).
+
+Воно перемикає, куди йдуть фото/відео з кроків 9-10 (TikTok - завжди
+текстове посилання):
 
 - **`telegram`** (за замовчуванням) - нічого нікуди не завантажується,
   зберігається лише Telegram `file_id` (ідентифікатор, який бот отримує
@@ -371,7 +411,7 @@ https://www.tiktok.com/@user/video/123... |
 bot/
 ├── main.py              # точка входу (polling)
 ├── config.py            # читання .env, довідники (типи угод/об'єктів, валюти...)
-├── google_services.py   # OAuth, Google Sheets CRUD, завантаження у Google Drive
+├── google_services.py   # Google Sheets (+ Drive за режимом MEDIA_STORAGE)
 ├── edit_tokens.py        # короткі токени для кнопки "Редагувати" у видачі пошуку
 ├── keyboards.py          # усі ReplyKeyboard/InlineKeyboard бота
 ├── states.py             # FSM-стани (кроки майстра додавання, пошук)
@@ -382,7 +422,8 @@ bot/
 │   └── search.py          # "Пошук" за населеним пунктом
 ├── .env                   # реальні секрети (НЕ в git)
 ├── .env.example           # шаблон .env (у git)
-└── google-oauth-client.json  # OAuth-клієнт з Google Cloud (НЕ в git)
+├── google-service-account.json  # ключ SA (telegram, НЕ в git)
+└── google-oauth-client.json     # OAuth (googledrive, НЕ в git)
 requirements.txt
 CHANGELOG.md
 ```
